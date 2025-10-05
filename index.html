@@ -17,6 +17,7 @@ html, body {
     background: black;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     overflow-x: hidden;
+    scroll-behavior: smooth;
 }
 
 /* Main cinematic section */
@@ -60,9 +61,10 @@ html, body {
     pointer-events: none;
 }
 
+/* Initial clip-path for after-image with transition for smoothness */
 .after-image {
     clip-path: inset(0 0 0 100%);
-    transition: none; /* Smooth scroll-driven animation */
+    transition: clip-path 0.1s ease-out;
 }
 
 /* Progress indicator with yellow gradient */
@@ -115,7 +117,7 @@ html, body {
     letter-spacing: 0.5px;
     transform: scale(1);
     filter: blur(0px);
-    transition: none; /* We'll handle this with direct style updates */
+    transition: none; /* We'll animate with direct style updates */
 }
 
 .cinematic-section.active .cinematic-text {
@@ -174,10 +176,10 @@ html, body {
     z-index: 25;
 }
 
-/* Mobile optimizations */
+/* Mobile responsiveness */
 @media (max-width: 768px) {
     .cinematic-section {
-        height: 250vh; /* Shorter on mobile */
+        height: 250vh;
     }
     
     .progress-bar {
@@ -205,33 +207,6 @@ html, body {
         font-size: 0.9rem;
     }
 }
-
-/* Smooth scrolling for the page */
-html {
-    scroll-behavior: smooth;
-}
-
-/* Content after cinematic section */
-.content-after {
-    background: white;
-    min-height: 100vh;
-    padding: 4rem 2rem;
-    position: relative;
-    z-index: 5;
-}
-
-.content-after h3 {
-    font-size: 2rem;
-    margin-bottom: 1rem;
-    text-align: center;
-}
-
-.content-after p {
-    max-width: 800px;
-    margin: 0 auto;
-    line-height: 1.6;
-    font-size: 1.1rem;
-}
 </style>
 </head>
 <body>
@@ -241,9 +216,9 @@ html {
 <section class="cinematic-section" id="cinematic-section">
     <div class="cinematic-viewport" id="cinematic-viewport">
         <div class="image-container">
-            <!-- Updated images -->
+            <!-- Your provided image URLs -->
             <img src="https://media.sellfy.store/images/PXXhbh0L/9wEH/rage_creators_-_solder_feat._dro-capone_official_music_video.00_05_28_19.still020_copy.jpg" alt="Before" id="before-img" />
-            <img src="rage_creators_-_solder_feat._dro-capone_official_music_video.00_05_28_19.still021_copy.jpg" class="after-image" alt="After" id="after-img" />
+            <img src="https://media.sellfy.store/images/PXXhbh0L/leES/rage_creators_-_solder_feat._dro-capone_official_music_video.00_05_28_19.still021_copy.jpg" class="after-image" alt="After" id="after-img" />
         </div>
         
         <div class="cinematic-text" id="cinematic-text">
@@ -269,7 +244,7 @@ html {
 <script>
 (function() {
     'use strict';
-    
+
     let isLoaded = false;
     let cinematicSection = null;
     let cinematicViewport = null;
@@ -279,7 +254,7 @@ html {
     let cinematicText = null;
     let cinematicTextP = null;
     let isActive = false;
-    
+
     // Throttle function for performance
     function throttle(func, limit) {
         let inThrottle;
@@ -293,18 +268,19 @@ html {
             }
         }
     }
-    
+
     // Initialize the cinematic experience
     function initializeCinematic() {
         const beforeImg = document.getElementById('before-img');
         const afterImg = document.getElementById('after-img');
         let loadedCount = 0;
-        
+
         function imageLoaded() {
+            console.log('Image loaded:', this.src);
             loadedCount++;
             if (loadedCount === 2) {
                 document.getElementById('loading').style.display = 'none';
-                
+
                 // Get DOM elements
                 cinematicSection = document.getElementById('cinematic-section');
                 cinematicViewport = document.getElementById('cinematic-viewport');
@@ -313,81 +289,87 @@ html {
                 scrollHint = document.getElementById('scroll-hint');
                 cinematicText = document.getElementById('cinematic-text');
                 cinematicTextP = cinematicText.querySelector('p');
-                
+
+                // Set transition for clip-path for smooth animation
+                afterImage.style.transition = 'clip-path 0.1s ease-out';
+
                 isLoaded = true;
                 setupScrollHandler();
-                
+
                 // Hide scroll hint after 5 seconds
                 setTimeout(() => {
                     if (scrollHint) scrollHint.classList.add('fade-out');
                 }, 5000);
             }
         }
-        
+
         beforeImg.onload = imageLoaded;
         afterImg.onload = imageLoaded;
-        
-        // Handle already loaded images
+
+        // handle already loaded images
         if (beforeImg.complete) imageLoaded();
         if (afterImg.complete) imageLoaded();
     }
-    
+
     // Update text animation smoothly based on scroll progress
     function updateTextAnimation(scrollProgress) {
         if (!cinematicTextP) return;
-        
+
         // Create smooth curves for different effects
         const textScale = 1 + (scrollProgress * 1.5); // Scale from 1 to 2.5
-        const textOpacity = Math.max(0, 0.9 - (scrollProgress * 1.2)); // Fade from 0.9 to 0
+        const textOpacity = Math.max(0, 0.9 - (scrollProgress * 0.9)); // Fade from 0.9 to 0
         const textBlur = scrollProgress * 4; // Blur from 0 to 4px
-        
+
         // Apply the transformations directly for smooth animation
         cinematicTextP.style.transform = `scale(${textScale})`;
         cinematicTextP.style.opacity = textOpacity;
         cinematicTextP.style.filter = `blur(${textBlur}px)`;
     }
-    
+
     // Setup scroll-driven animation
     function setupScrollHandler() {
         const handleScroll = throttle(() => {
             if (!isLoaded) return;
-            
+
             const rect = cinematicSection.getBoundingClientRect();
             const windowHeight = window.innerHeight;
             const sectionHeight = cinematicSection.offsetHeight;
-            
+
             // Check if section is in viewport
             const isInViewport = rect.top < windowHeight && rect.bottom > 0;
-            
+
             if (isInViewport) {
                 if (!isActive) {
                     isActive = true;
                     cinematicSection.classList.add('active');
                 }
-                
+
                 // Calculate progress (0 to 1)
                 const scrollProgress = Math.max(0, Math.min(1, -rect.top / (sectionHeight - windowHeight)));
-                
+
+                // Debug: log progress
+                // console.log('Scroll progress:', scrollProgress);
+
                 // Update reveal effect
                 const revealPercent = scrollProgress * 100;
-                afterImage.style.clipPath = `inset(0 0 0 ${100 - revealPercent}%)`;
-                
+                // Clamp to 0-100
+                const clampedPercent = Math.min(100, Math.max(0, revealPercent));
+                afterImage.style.clipPath = `inset(0 0 0 ${100 - clampedPercent}%)`;
+
                 // Update progress bar
-                progressFill.style.width = `${revealPercent}%`;
-                
-                // Add some easing for smoother animation
+                progressFill.style.width = `${clampedPercent}%`;
+
+                // Animate zoom and text
                 const easedProgress = easeOutCubic(scrollProgress);
-                
-                // Cinematic zoom effect - synchronized with text
-                const scale = 1 + (easedProgress * 0.05); // Subtle zoom from 1 to 1.05
+                const scale = 1 + (easedProgress * 0.05);
                 cinematicViewport.style.transform = `scale(${scale})`;
-                
-                // Update text animation - perfectly synchronized
+
+                // Animate text
                 updateTextAnimation(scrollProgress);
-                
+
             } else {
                 if (isActive && rect.bottom < 0) {
-                    // Section has passed, ensure it's fully revealed
+                    // Section fully passed
                     afterImage.style.clipPath = `inset(0 0 0 0%)`;
                     progressFill.style.width = '100%';
                     if (cinematicTextP) {
@@ -396,12 +378,12 @@ html {
                         cinematicTextP.style.filter = 'blur(4px)';
                     }
                 } else if (rect.top > windowHeight) {
-                    // Section hasn't been reached yet, reset
+                    // Not yet reached
                     isActive = false;
                     cinematicSection.classList.remove('active');
                     afterImage.style.clipPath = `inset(0 0 0 100%)`;
                     progressFill.style.width = '0%';
-                    cinematicViewport.style.transform = 'scale(1)';
+                    cinematicViewport.style.transform = `scale(1)`;
                     if (cinematicTextP) {
                         cinematicTextP.style.transform = 'scale(1)';
                         cinematicTextP.style.opacity = '0.9';
@@ -410,83 +392,36 @@ html {
                 }
             }
         }, 16); // ~60fps
-        
+
         window.addEventListener('scroll', handleScroll);
-        
-        // Initial call
+        // Run once initially
         handleScroll();
     }
-    
-    // Easing function for smoother animation
+
+    // Easing function
     function easeOutCubic(t) {
         return 1 - Math.pow(1 - t, 3);
     }
-    
-    // Enhanced mobile touch handling
-    function setupMobileInteractions() {
-        if ('ontouchstart' in window) {
-            let startY = 0;
-            let isScrolling = false;
-            
-            cinematicViewport.addEventListener('touchstart', (e) => {
-                startY = e.touches[0].clientY;
-                isScrolling = false;
-            });
-            
-            cinematicViewport.addEventListener('touchmove', (e) => {
-                if (!isScrolling) {
-                    const currentY = e.touches[0].clientY;
-                    const deltaY = startY - currentY;
-                    
-                    if (Math.abs(deltaY) > 10) {
-                        isScrolling = true;
-                    }
-                }
-            });
-        }
-    }
-    
-    // Performance optimization: Pause animations when not visible
-    function setupVisibilityHandler() {
-        if ('IntersectionObserver' in window) {
-            const observer = new IntersectionObserver((entries) => {
-                entries.forEach(entry => {
-                    if (entry.isIntersecting) {
-                        // Resume animations
-                        document.body.style.willChange = 'scroll-position';
-                    } else {
-                        // Pause animations
-                        document.body.style.willChange = 'auto';
-                    }
-                });
-            });
-            
-            observer.observe(cinematicSection || document.body);
-        }
-    }
-    
+
     // Initialize everything
     function init() {
         initializeCinematic();
         setupMobileInteractions();
-        setupVisibilityHandler();
-        
-        // Preload images for better performance
+
+        // Optional: preload images explicitly (not necessary if images load normally)
         const link1 = document.createElement('link');
         link1.rel = 'preload';
         link1.as = 'image';
         link1.href = 'https://media.sellfy.store/images/PXXhbh0L/9wEH/rage_creators_-_solder_feat._dro-capone_official_music_video.00_05_28_19.still020_copy.jpg';
-        
         const link2 = document.createElement('link');
         link2.rel = 'preload';
         link2.as = 'image';
-        link2.href = 'rage_creators_-_solder_feat._dro-capone_official_music_video.00_05_28_19.still021_copy.jpg';
-        
+        link2.href = 'https://media.sellfy.store/images/PXXhbh0L/leES/rage_creators_-_solder_feat._dro-capone_official_music_video.00_05_28_19.still021_copy.jpg';
+
         document.head.appendChild(link1);
         document.head.appendChild(link2);
     }
-    
-    // Start when DOM is ready
+
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {
