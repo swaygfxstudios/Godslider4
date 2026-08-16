@@ -37,6 +37,7 @@ html, body {
     height: 100vh;
     overflow: hidden;
     z-index: 10;
+    will-change: transform;
 }
 
 /* Image container */
@@ -61,10 +62,10 @@ html, body {
     pointer-events: none;
 }
 
-/* Initial clip-path for after-image with transition for smoothness */
+/* Remove transition from clip-path to prevent jitter */
 .after-image {
     clip-path: inset(0 0 0 100%);
-    transition: clip-path 0.1s ease-out;
+    will-change: clip-path;
 }
 
 /* Progress indicator with yellow gradient */
@@ -87,7 +88,7 @@ html, body {
     background: linear-gradient(90deg, #ffe200, #ffb700, #ff8c00);
     border-radius: 1px;
     width: 0%;
-    transition: width 0.1s ease-out;
+    will-change: width;
     box-shadow: 0 0 8px rgba(255, 226, 0, 0.4);
 }
 
@@ -117,7 +118,7 @@ html, body {
     letter-spacing: 0.5px;
     transform: scale(1);
     filter: blur(0px);
-    transition: none; /* We'll animate with direct style updates */
+    will-change: transform, opacity, filter;
 }
 
 .cinematic-section.active .cinematic-text {
@@ -251,9 +252,10 @@ html, body {
     let afterImage = null;
     let progressFill = null;
     let scrollHint = null;
-    let cinematicText = null;
     let cinematicTextP = null;
     let isActive = false;
+    let lastProgress = -1;
+    let rafId = null;
 
     // Throttle function for performance
     function throttle(func, limit) {
@@ -269,61 +271,34 @@ html, body {
         }
     }
 
-    // Initialize the cinematic experience
-    function initializeCinematic() {
-        const beforeImg = document.getElementById('before-img');
-        const afterImg = document.getElementById('after-img');
-        let loadedCount = 0;
+    // Update function using requestAnimationFrame for smooth rendering
+    function updateAnimation(scrollProgress) {
+        // Only update if progress actually changed
+        if (lastProgress === scrollProgress) return;
+        lastProgress = scrollProgress;
 
-        function imageLoaded() {
-            console.log('Image loaded:', this.src);
-            loadedCount++;
-            if (loadedCount === 2) {
-                document.getElementById('loading').style.display = 'none';
+        // Update reveal effect - direct style update without transitions
+        const clampedPercent = Math.min(100, Math.max(0, scrollProgress * 100));
+        afterImage.style.clipPath = `inset(0 0 0 ${100 - clampedPercent}%)`;
 
-                // Get DOM elements
-                cinematicSection = document.getElementById('cinematic-section');
-                cinematicViewport = document.getElementById('cinematic-viewport');
-                afterImage = document.getElementById('after-img');
-                progressFill = document.getElementById('progress-fill');
-                scrollHint = document.getElementById('scroll-hint');
-                cinematicText = document.getElementById('cinematic-text');
-                cinematicTextP = cinematicText.querySelector('p');
+        // Update progress bar
+        progressFill.style.width = `${clampedPercent}%`;
 
-                // Set transition for clip-path for smooth animation
-                afterImage.style.transition = 'clip-path 0.1s ease-out';
+        // Animate zoom
+        const easedProgress = easeOutCubic(scrollProgress);
+        const scale = 1 + (easedProgress * 0.05);
+        cinematicViewport.style.transform = `scale(${scale})`;
 
-                isLoaded = true;
-                setupScrollHandler();
-
-                // Hide scroll hint after 5 seconds
-                setTimeout(() => {
-                    if (scrollHint) scrollHint.classList.add('fade-out');
-                }, 5000);
-            }
+        // Animate text
+        if (cinematicTextP) {
+            const textScale = 1 + (scrollProgress * 1.5);
+            const textOpacity = Math.max(0, 0.9 - (scrollProgress * 0.9));
+            const textBlur = scrollProgress * 4;
+            
+            cinematicTextP.style.transform = `scale(${textScale})`;
+            cinematicTextP.style.opacity = textOpacity;
+            cinematicTextP.style.filter = `blur(${textBlur}px)`;
         }
-
-        beforeImg.onload = imageLoaded;
-        afterImg.onload = imageLoaded;
-
-        // handle already loaded images
-        if (beforeImg.complete) imageLoaded();
-        if (afterImg.complete) imageLoaded();
-    }
-
-    // Update text animation smoothly based on scroll progress
-    function updateTextAnimation(scrollProgress) {
-        if (!cinematicTextP) return;
-
-        // Create smooth curves for different effects
-        const textScale = 1 + (scrollProgress * 1.5); // Scale from 1 to 2.5
-        const textOpacity = Math.max(0, 0.9 - (scrollProgress * 0.9)); // Fade from 0.9 to 0
-        const textBlur = scrollProgress * 4; // Blur from 0 to 4px
-
-        // Apply the transformations directly for smooth animation
-        cinematicTextP.style.transform = `scale(${textScale})`;
-        cinematicTextP.style.opacity = textOpacity;
-        cinematicTextP.style.filter = `blur(${textBlur}px)`;
     }
 
     // Setup scroll-driven animation
@@ -347,48 +322,24 @@ html, body {
                 // Calculate progress (0 to 1)
                 const scrollProgress = Math.max(0, Math.min(1, -rect.top / (sectionHeight - windowHeight)));
 
-                // Debug: log progress
-                // console.log('Scroll progress:', scrollProgress);
-
-                // Update reveal effect
-                const revealPercent = scrollProgress * 100;
-                // Clamp to 0-100
-                const clampedPercent = Math.min(100, Math.max(0, revealPercent));
-                afterImage.style.clipPath = `inset(0 0 0 ${100 - clampedPercent}%)`;
-
-                // Update progress bar
-                progressFill.style.width = `${clampedPercent}%`;
-
-                // Animate zoom and text
-                const easedProgress = easeOutCubic(scrollProgress);
-                const scale = 1 + (easedProgress * 0.05);
-                cinematicViewport.style.transform = `scale(${scale})`;
-
-                // Animate text
-                updateTextAnimation(scrollProgress);
+                // Use requestAnimationFrame for smooth updates
+                if (rafId) {
+                    cancelAnimationFrame(rafId);
+                }
+                rafId = requestAnimationFrame(() => {
+                    updateAnimation(scrollProgress);
+                });
 
             } else {
                 if (isActive && rect.bottom < 0) {
-                    // Section fully passed
-                    afterImage.style.clipPath = `inset(0 0 0 0%)`;
-                    progressFill.style.width = '100%';
-                    if (cinematicTextP) {
-                        cinematicTextP.style.transform = 'scale(2.5)';
-                        cinematicTextP.style.opacity = '0';
-                        cinematicTextP.style.filter = 'blur(4px)';
-                    }
+                    // Section fully passed - show complete
+                    updateAnimation(1);
                 } else if (rect.top > windowHeight) {
-                    // Not yet reached
+                    // Not yet reached - reset
                     isActive = false;
                     cinematicSection.classList.remove('active');
-                    afterImage.style.clipPath = `inset(0 0 0 100%)`;
-                    progressFill.style.width = '0%';
-                    cinematicViewport.style.transform = `scale(1)`;
-                    if (cinematicTextP) {
-                        cinematicTextP.style.transform = 'scale(1)';
-                        cinematicTextP.style.opacity = '0.9';
-                        cinematicTextP.style.filter = 'blur(0px)';
-                    }
+                    lastProgress = -1; // Force update on next scroll
+                    updateAnimation(0);
                 }
             }
         }, 16); // ~60fps
@@ -403,12 +354,48 @@ html, body {
         return 1 - Math.pow(1 - t, 3);
     }
 
+    // Initialize the cinematic experience
+    function initializeCinematic() {
+        const beforeImg = document.getElementById('before-img');
+        const afterImg = document.getElementById('after-img');
+        let loadedCount = 0;
+
+        function imageLoaded() {
+            loadedCount++;
+            if (loadedCount === 2) {
+                document.getElementById('loading').style.display = 'none';
+
+                // Get DOM elements
+                cinematicSection = document.getElementById('cinematic-section');
+                cinematicViewport = document.getElementById('cinematic-viewport');
+                afterImage = document.getElementById('after-img');
+                progressFill = document.getElementById('progress-fill');
+                scrollHint = document.getElementById('scroll-hint');
+                cinematicTextP = document.querySelector('#cinematic-text p');
+
+                isLoaded = true;
+                setupScrollHandler();
+
+                // Hide scroll hint after 5 seconds
+                setTimeout(() => {
+                    if (scrollHint) scrollHint.classList.add('fade-out');
+                }, 5000);
+            }
+        }
+
+        beforeImg.onload = imageLoaded;
+        afterImg.onload = imageLoaded;
+
+        // handle already loaded images
+        if (beforeImg.complete) imageLoaded();
+        if (afterImg.complete) imageLoaded();
+    }
+
     // Initialize everything
     function init() {
         initializeCinematic();
-        setupMobileInteractions();
 
-        // Optional: preload images explicitly (not necessary if images load normally)
+        // Preload images
         const link1 = document.createElement('link');
         link1.rel = 'preload';
         link1.as = 'image';
